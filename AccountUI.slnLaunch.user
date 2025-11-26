@@ -1,0 +1,23 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "ChessUI\\ChessUI.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "AccountUI\\AccountUI.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Server\\Server.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "ChessLogic\\ChessLogic.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

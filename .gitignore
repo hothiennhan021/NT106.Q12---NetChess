@@ -1,0 +1,13 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs
+/AccountUI/bin/Debug/net8.0-windows
+/AccountUI/obj
+/ChessLogic/bin/Debug/net8.0
+/ChessLogic/obj
+/ChessUI/bin/Debug/net8.0-windows
+/ChessUI/obj
+/Server/bin/Debug/net8.0
+/Server/obj
