@@ -45,7 +45,7 @@
             button1.Name = "button1";
             button1.Size = new Size(280, 68);
             button1.TabIndex = 33;
-            button1.Text = "Chơi Với AI";
+            button1.Text = "Ghép Ngẫu Nhiên";
             button1.UseVisualStyleBackColor = false;
             button1.Click += button1_Click;
             // 

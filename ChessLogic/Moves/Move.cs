@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace ChessLogic
 {
     public abstract class Move
@@ -13,7 +8,7 @@ namespace ChessLogic
         public abstract Position ToPos { get; }
         public abstract void Execute(Board board);
 
-        public virtual bool IsLegal( Board board)
+        public virtual bool IsLegal(Board board)
         {
             Player player = board[FromPos].Color;
             Board boardCopy = board.Copy();

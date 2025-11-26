@@ -1,298 +1,351 @@
-﻿#nullable disable
-using ChessLogic;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents; // Dùng cho Chat (RichTextBox)
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using ChessClient; // Project ChessClient
+using ChessLogic;  // Project ChessLogic (GameState, Board, Timer...)
 
 namespace ChessUI
 {
     public partial class MainWindow : Window
     {
+        // --- UI COMPONENTS ---
         private readonly Image[,] pieceImages = new Image[8, 8];
         private readonly Rectangle[,] highlights = new Rectangle[8, 8];
         private readonly Dictionary<Position, Move> moveCache = new Dictionary<Position, Move>();
 
+        // --- GAME STATE ---
         private GameState _localGameState;
         private Position selectedPos = null;
-
-        private NetworkClient _networkClient;
         private Player _myColor;
 
-        private Task _listenerTask;
-        private Action _showMenuAction;
-        // [SỬA 1] Biến cờ để kiểm soát việc chuyển màn hình
-        private bool _isNavigatingToMenu = false;
+        // --- NETWORK & SYSTEM ---
+        private NetworkClient _networkClient;
+        private bool _isNavigatingToMenu = false; // Cờ kiểm soát điều hướng an toàn (của bạn)
+        private Action _showMenuAction;           // Hàm quay về Menu (của bạn)
 
+        // --- FEATURES (Chat & Timer - của bạn bạn) ---
+        private ChessTimer _gameTimer;
+
+        // Constructor nhận cả message khởi tạo và action thoát
         public MainWindow(string gameStartMessage, Action onExit)
         {
             InitializeComponent();
             _showMenuAction = onExit;
-            InitializedBoard();
+
+            InitializedBoard(); // Vẽ bàn cờ trắng
 
             try
             {
-                // 1. Lấy kết nối từ ClientManager
                 _networkClient = ClientManager.Instance;
-                if (!_networkClient.IsConnected)
-                {
-                    throw new Exception("Client không được kết nối.");
-                }
+                if (!_networkClient.IsConnected) throw new Exception("Mất kết nối Client.");
 
-                // 2. Xử lý tin nhắn khởi tạo (GAME_START) ngay lập tức
+                // 1. Khởi tạo Timer (Mặc định 10p, sẽ sync ngay lập tức)
+                _gameTimer = new ChessTimer(10);
+                _gameTimer.Tick += OnTimerTick; // Đăng ký sự kiện nhảy số
+
+                // 2. Xử lý tin nhắn GAME_START ngay lập tức
                 HandleServerMessage(gameStartMessage);
 
-                // 3. Bắt đầu luồng lắng nghe tin nhắn mới
+                // 3. Bắt đầu lắng nghe tin nhắn mới
                 StartServerListener();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Lỗi khởi động game: {ex.Message}", "Lỗi");
+                MessageBox.Show($"Lỗi khởi động: {ex.Message}");
                 this.Close();
             }
         }
 
+        // --- PHẦN 1: MẠNG & XỬ LÝ TIN NHẮN (GỘP LOGIC) ---
+
         private void StartServerListener()
         {
-            _listenerTask = Task.Run(() =>
+            Task.Run(() =>
             {
                 try
                 {
                     while (true)
                     {
-                        string message = _networkClient.WaitForMessage();
-                        if (message == null)
+                        string msg = _networkClient.WaitForMessage();
+                        if (msg == null)
                         {
                             Dispatcher.Invoke(OnDisconnected);
                             break;
                         }
-
-                        Dispatcher.Invoke(() =>
-                        {
-                            try
-                            {
-                                HandleServerMessage(message);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"[MainWindow Error] {ex.Message}");
-                            }
-                        });
+                        // Đưa về luồng UI để xử lý an toàn
+                        Dispatcher.Invoke(() => HandleServerMessage(msg));
                     }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Listener stopped: " + ex.Message);
-                }
+                catch { }
             });
         }
 
         private void OnDisconnected()
         {
-            // Nếu đang chủ động chuyển về Menu thì không cần báo lỗi mất kết nối
-            if (_isNavigatingToMenu) return;
-
-            MessageBox.Show("Mất kết nối đến server.", "Mất kết nối");
+            if (_isNavigatingToMenu) return; // Nếu đang chủ động thoát thì thôi
+            MessageBox.Show("Mất kết nối đến Server!", "Lỗi mạng");
             this.Close();
         }
 
-        // --- HÀM XỬ LÝ TIN NHẮN TỪ SERVER ---
+        // HÀM XỬ LÝ TRUNG TÂM (QUAN TRỌNG NHẤT)
         private void HandleServerMessage(string message)
         {
-            var parts = message.Split('|');
-            var command = parts[0];
+            string[] parts = message.Split('|');
+            string command = parts[0];
 
             switch (command)
             {
                 case "GAME_START":
-                    // Ẩn menu Game Over/Màn hình chờ nếu đang hiện
-                    MenuContainer.Content = null;
-
-                    _myColor = (parts[1] == "WHITE") ? Player.White : Player.Black;
-                    Board board = Serialization.ParseBoardString(parts[2]);
-
-                    _localGameState = new GameState(Player.White, board);
-
-                    DrawBoard(_localGameState.Board);
-                    SetCursor(_localGameState.CurrentPlayer);
-                    this.Title = $"Game Cờ Vua - Bạn là quân {parts[1]}";
+                    // Format: GAME_START|COLOR|BOARD|W_TIME|B_TIME
+                    SetupGame(parts);
                     break;
 
                 case "UPDATE":
-                    Console.WriteLine("[INFO] Nhận UPDATE bàn cờ từ Server.");
-                    Board updatedBoard = Serialization.ParseBoardString(parts[1]);
-                    Player currentPlayer = (parts[2] == "WHITE") ? Player.White : Player.Black;
-
-                    _localGameState = new GameState(currentPlayer, updatedBoard);
-
-                    DrawBoard(_localGameState.Board);
-                    SetCursor(_localGameState.CurrentPlayer);
-
-                    if (_localGameState.IsGameOver())
-                    {
-                        if (!IsMenuOnScreen()) ShowGameOver();
-                    }
+                    // Format: UPDATE|BOARD|CURRENT_PLAYER|W_TIME|B_TIME
+                    UpdateGame(parts);
                     break;
 
-                case "ERROR":
-                    MessageBox.Show(parts[1], "Lỗi từ Server");
+                case "CHAT":
+                    // Format: CHAT|CONTENT
+                    if (parts.Length > 1) AppendChatMessage("Đối thủ", parts[1]);
                     break;
 
+                // --- CÁC LỆNH TƯƠNG TÁC (Logic của bạn) ---
                 case "GAME_OVER":
-                    MessageBox.Show(parts[1], "Trò chơi kết thúc");
+                    _gameTimer.Stop();
+                    MessageBox.Show(parts[1], "Kết thúc");
                     if (!IsMenuOnScreen()) ShowGameOver();
                     break;
 
-                // --- XỬ LÝ YÊU CẦU CHƠI LẠI ---
                 case "ASK_RESTART":
-                    var result = MessageBox.Show("Đối thủ muốn chơi ván mới. Bạn có đồng ý không?",
-                                                 "Yêu cầu chơi lại",
-                                                 MessageBoxButton.YesNo,
-                                                 MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        Task.Run(async () => await _networkClient.SendAsync("REQUEST_RESTART"));
-                    }
-                    else
-                    {
-                        Task.Run(async () => await _networkClient.SendAsync("RESTART_NO"));
-                    }
+                    HandleRestartRequest();
                     break;
 
                 case "RESTART_DENIED":
-                    MessageBox.Show("Đối thủ đã từ chối chơi lại.", "Thông báo");
+                    MessageBox.Show("Đối thủ từ chối chơi lại.");
                     if (!IsMenuOnScreen()) ShowGameOver();
                     break;
-                // Trong file MainWindow.xaml.cs -> HandleServerMessage()
 
                 case "OPPONENT_LEFT":
-                    Dispatcher.Invoke(() =>
-                    {
-                        MessageBox.Show("Đối thủ đã thoát khỏi trò chơi.\nBạn sẽ trở về màn hình chính.",
-                                        "Kết thúc",
-                                        MessageBoxButton.OK,
-                                        MessageBoxImage.Information);
-
-                        // [SỬA] Gọi hàm chung đã viết ở Bước 1
-                        ReturnToMainMenu();
-                    });
+                    MessageBox.Show("Đối thủ đã thoát. Bạn sẽ về Menu chính.");
+                    ReturnToMainMenu();
                     break;
 
-                case "WAITING":
+                case "ERROR":
+                    MessageBox.Show(parts[1], "Lỗi");
                     break;
             }
         }
 
-        // --- HÀM HIỂN THỊ MENU KẾT THÚC & XỬ LÝ NÚT BẤM ---
+        // --- CÁC HÀM XỬ LÝ LOGIC CHI TIẾT ---
+
+        private void SetupGame(string[] parts)
+        {
+            // Ẩn menu cũ nếu có
+            MenuContainer.Content = null;
+
+            _myColor = (parts[1] == "WHITE") ? Player.White : Player.Black;
+            this.Title = $"Cờ Vua - Bạn là quân {_myColor}";
+
+            Board board = Serialization.ParseBoardString(parts[2]);
+            _localGameState = new GameState(Player.White, board);
+
+            DrawBoard(_localGameState.Board);
+            SetCursor(_localGameState.CurrentPlayer);
+
+            // Xử lý Timer (Phần code của bạn bạn)
+            if (parts.Length >= 5)
+            {
+                int wTime = int.Parse(parts[3]);
+                int bTime = int.Parse(parts[4]);
+                _gameTimer.Sync(wTime, bTime);
+                _gameTimer.Start(Player.White);
+                UpdateTimerColors();
+            }
+        }
+
+        private void UpdateGame(string[] parts)
+        {
+            Board board = Serialization.ParseBoardString(parts[1]);
+            Player currentPlayer = (parts[2] == "WHITE") ? Player.White : Player.Black;
+
+            _localGameState = new GameState(currentPlayer, board);
+
+            DrawBoard(_localGameState.Board);
+            SetCursor(_localGameState.CurrentPlayer);
+
+            // Sync Timer
+            if (parts.Length >= 5)
+            {
+                int wTime = int.Parse(parts[3]);
+                int bTime = int.Parse(parts[4]);
+                _gameTimer.Sync(wTime, bTime);
+                _gameTimer.Start(currentPlayer);
+                UpdateTimerColors();
+            }
+        }
+
+        private void HandleRestartRequest()
+        {
+            var result = MessageBox.Show("Đối thủ muốn chơi lại. Đồng ý?", "Yêu cầu", MessageBoxButton.YesNo);
+            if (result == MessageBoxResult.Yes)
+                _ = _networkClient.SendAsync("REQUEST_RESTART");
+            else
+                _ = _networkClient.SendAsync("RESTART_NO");
+        }
+
+        // --- PHẦN 2: CHAT & TIMER UI (CỦA BẠN BẠN) ---
+
+        private void OnTimerTick(int wTime, int bTime)
+        {
+            // Timer chạy thread riêng nên phải Invoke
+            Dispatcher.Invoke(() =>
+            {
+                lblWhiteTime.Text = TimeSpan.FromSeconds(wTime).ToString(@"mm\:ss");
+                lblBlackTime.Text = TimeSpan.FromSeconds(bTime).ToString(@"mm\:ss");
+            });
+        }
+
+        private void UpdateTimerColors()
+        {
+            if (_localGameState.CurrentPlayer == Player.White)
+            {
+                lblWhiteTime.Foreground = Brushes.Red;
+                lblBlackTime.Foreground = Brushes.White;
+            }
+            else
+            {
+                lblWhiteTime.Foreground = Brushes.White;
+                lblBlackTime.Foreground = Brushes.Red;
+            }
+        }
+
+        private async void btnSendChat_Click(object sender, RoutedEventArgs e)
+        {
+            string content = txtChatInput.Text.Trim();
+            if (!string.IsNullOrEmpty(content))
+            {
+                await _networkClient.SendAsync($"CHAT|{content}");
+                AppendChatMessage("Tôi", content);
+                txtChatInput.Text = "";
+            }
+        }
+
+        private void txtChatInput_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter) btnSendChat_Click(sender, e);
+        }
+
+        private void AppendChatMessage(string sender, string message)
+        {
+            Paragraph p = new Paragraph();
+            Run rSender = new Run(sender + ": ") { FontWeight = FontWeights.Bold, Foreground = Brushes.Orange };
+            if (sender == "Tôi") rSender.Foreground = Brushes.LightBlue;
+
+            p.Inlines.Add(rSender);
+            p.Inlines.Add(new Run(message) { Foreground = Brushes.White });
+
+            txtChatHistory.Document.Blocks.Add(p);
+            txtChatHistory.ScrollToEnd();
+        }
+
+        // --- PHẦN 3: LOGIC THOÁT & MENU (CỦA BẠN) ---
+
         private void ShowGameOver()
         {
-            GameOverMenu gameOverMenu = new GameOverMenu(_localGameState);
-            MenuContainer.Content = gameOverMenu;
+            GameOverMenu menu = new GameOverMenu(_localGameState); // UserControl của bạn
+            MenuContainer.Content = menu;
 
-            gameOverMenu.OptionSelected += option =>
+            menu.OptionSelected += option =>
             {
-                if (option == Option.Restart)
+                if (option == Option.Restart) // Option là enum trong file GameOverMenu của bạn
                 {
-                    Task.Run(async () => await _networkClient.SendAsync("REQUEST_RESTART"));
-                    // Hiển thị chờ (Code hiển thị chờ của bạn ở đây...)
-                    TextBlock waitingText = new TextBlock { Text = "Đang chờ đối thủ...", FontSize = 30, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                    MenuContainer.Content = new Border { Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)), Child = waitingText };
+                    _ = _networkClient.SendAsync("REQUEST_RESTART");
+                    // Hiện thông báo chờ tạm thời
+                    MenuContainer.Content = new TextBlock { Text = "Đang chờ đối thủ...", Foreground = Brushes.White, FontSize = 20, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
                 }
-                else // Exit
+                else
                 {
                     QuitGameSafe();
                 }
             };
         }
 
-        private bool IsMenuOnScreen()
+        private async void QuitGameSafe()
         {
-            return MenuContainer.Content != null;
+            try { await _networkClient.SendAsync("LEAVE_GAME"); } catch { }
+            ReturnToMainMenu();
+        }
+
+        private void ReturnToMainMenu()
+        {
+            _isNavigatingToMenu = true;
+            Dispatcher.Invoke(() =>
+            {
+                _showMenuAction?.Invoke();
+                this.Close();
+            });
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            // [SỬA 4] Chỉ đóng kết nối nếu KHÔNG PHẢI là đang chuyển về menu
-            // Nếu bấm X đỏ -> _isNavigatingToMenu = false -> Cắt mạng (Đúng)
-            // Nếu bấm Exit -> _isNavigatingToMenu = true -> Giữ mạng (Đúng)
-            if (_isNavigatingToMenu == false)
+            if (!_isNavigatingToMenu) _networkClient.CloseConnection();
+        }
+
+        private bool IsMenuOnScreen() => MenuContainer.Content != null;
+
+        // --- PHẦN 4: VẼ BÀN CỜ & DI CHUYỂN (GIỮ NGUYÊN) ---
+
+        private void InitializedBoard()
+        {
+            for (int r = 0; r < 8; r++)
             {
-                if (_networkClient != null)
+                for (int c = 0; c < 8; c++)
                 {
-                    _networkClient.CloseConnection();
+                    Image img = new Image();
+                    pieceImages[r, c] = img;
+                    PieceGrid.Children.Add(img);
+
+                    Rectangle rect = new Rectangle();
+                    highlights[r, c] = rect;
+                    HighlightGrid.Children.Add(rect);
                 }
             }
         }
-        // Trong file MainWindow.xaml.cs
 
-        // Trong MainWindow.xaml.cs
-
-        private async void QuitGameSafe()
+        private void DrawBoard(Board board)
         {
-            try
+            for (int r = 0; r < 8; r++)
             {
-                // 1. Gửi tin nhắn báo Server là tôi chủ động thoát
-                if (_networkClient != null && _networkClient.IsConnected)
+                for (int c = 0; c < 8; c++)
                 {
-                    await _networkClient.SendAsync("LEAVE_GAME");
+                    Position pos = (_myColor == Player.Black) ? new Position(7 - r, 7 - c) : new Position(r, c);
+                    pieceImages[r, c].Source = Images.GetImage(board[pos]);
                 }
             }
-            catch
-            {
-                // Lờ đi lỗi nếu mạng đã mất
-            }
-            finally
-            {
-                // 2. Sau khi gửi xong (hoặc lỗi), tiến hành đóng Form và về Menu
-                ReturnToMainMenu();
-            }
         }
-
-        // Hàm về Menu (đã sửa ở bước trước, nhắc lại để chắc chắn)
-        private void ReturnToMainMenu()
-        {
-            _isNavigatingToMenu = true; // Cờ này quan trọng để chặn sự kiện Closing cắt mạng lần 2
-
-            // Đảm bảo chạy trên luồng UI chính
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                if (_showMenuAction != null) _showMenuAction.Invoke();
-                this.Close();
-            });
-        }
-     
-
-        #region Logic Game & UI (Giữ nguyên)
 
         private void BoardGrid_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (IsMenuOnScreen()) return;
-            if (_myColor == Player.None) return;
+            Point p = e.GetPosition(BoardGrid);
+            Position pos = ToSquarePosition(p);
 
-            Point point = e.GetPosition(BoardGrid);
-            Position pos = ToSquarePosition(point);
-
-            if (selectedPos == null)
-            {
-                OnFromPositionSelected(pos);
-            }
-            else
-            {
-                OnToPositionSelected(pos);
-            }
+            if (selectedPos == null) OnFromPositionSelected(pos);
+            else OnToPositionSelected(pos);
         }
 
         private void OnFromPositionSelected(Position pos)
         {
             if (_localGameState.CurrentPlayer != _myColor) return;
-
-            IEnumerable<Move> moves = _localGameState.MovesForPiece(pos);
+            var moves = _localGameState.MovesForPiece(pos);
             if (moves.Any())
             {
                 selectedPos = pos;
@@ -305,116 +358,47 @@ namespace ChessUI
         {
             selectedPos = null;
             HideHighlights();
-
             if (moveCache.TryGetValue(pos, out Move move))
             {
-                HandleMove(move);
+                // Kiểm tra hợp lệ trước khi gửi
+                if (!move.IsLegal(_localGameState.Board)) return;
+                _ = _networkClient.SendAsync($"MOVE|{move.FromPos.Row}|{move.FromPos.Column}|{move.ToPos.Row}|{move.ToPos.Column}");
             }
         }
 
-        private void HandleMove(Move move)
+        private Position ToSquarePosition(Point p)
         {
-            if (_localGameState.CurrentPlayer != _myColor) return;
-
-            Task.Run(async () =>
-            {
-                try
-                {
-                    bool isLegal = move.IsLegal(_localGameState.Board);
-                    if (!isLegal)
-                    {
-                        Dispatcher.Invoke(() => MessageBox.Show("Nước đi không hợp lệ! (Tự chiếu tướng?)"));
-                        return;
-                    }
-
-                    string moveString = $"MOVE|{move.FromPos.Row}|{move.FromPos.Column}|{move.ToPos.Row}|{move.ToPos.Column}";
-                    await _networkClient.SendAsync(moveString);
-                }
-                catch (Exception ex)
-                {
-                    Dispatcher.Invoke(() => MessageBox.Show($"Lỗi gửi nước đi: {ex.Message}"));
-                }
-            });
-        }
-
-        private void InitializedBoard()
-        {
-            for (int r = 0; r < 8; r++)
-            {
-                for (int c = 0; c < 8; c++)
-                {
-                    Image image = new Image();
-                    pieceImages[r, c] = image;
-                    PieceGrid.Children.Add(image);
-
-                    Rectangle highlight = new Rectangle();
-                    highlights[r, c] = highlight;
-                    HighlightGrid.Children.Add(highlight);
-                }
-            }
-        }
-
-        private void DrawBoard(Board board)
-        {
-            for (int r = 0; r < 8; r++)
-            {
-                for (int c = 0; c < 8; c++)
-                {
-                    Position boardPos = (_myColor == Player.Black) ? new Position(7 - r, 7 - c) : new Position(r, c);
-                    Pieces piece = board[boardPos];
-                    pieceImages[r, c].Source = Images.GetImage(piece);
-                }
-            }
-        }
-
-        private Position ToSquarePosition(Point point)
-        {
-            double squareSize = BoardGrid.ActualWidth / 8;
-            int row = (int)(point.Y / squareSize);
-            int col = (int)(point.X / squareSize);
-
-            if (_myColor == Player.Black)
-            {
-                row = 7 - row;
-                col = 7 - col;
-            }
-            return new Position(row, col);
+            double size = BoardGrid.ActualWidth / 8;
+            int r = (int)(p.Y / size);
+            int c = (int)(p.X / size);
+            if (_myColor == Player.Black) { r = 7 - r; c = 7 - c; }
+            return new Position(r, c);
         }
 
         private void CacheMoves(IEnumerable<Move> moves)
         {
             moveCache.Clear();
-            foreach (Move move in moves)
-            {
-                moveCache[move.ToPos] = move;
-            }
+            foreach (var m in moves) moveCache[m.ToPos] = m;
         }
 
         private void ShowHighlights()
         {
-            Color color = Color.FromArgb(159, 125, 255, 125);
-            foreach (Position to in moveCache.Keys)
+            foreach (var p in moveCache.Keys)
             {
-                int r = to.Row, c = to.Column;
+                int r = p.Row, c = p.Column;
                 if (_myColor == Player.Black) { r = 7 - r; c = 7 - c; }
-                highlights[r, c].Fill = new SolidColorBrush(color);
+                highlights[r, c].Fill = new SolidColorBrush(Color.FromArgb(100, 0, 255, 0));
             }
         }
 
         private void HideHighlights()
         {
-            foreach (Position to in moveCache.Keys)
-            {
-                int r = to.Row, c = to.Column;
-                if (_myColor == Player.Black) { r = 7 - r; c = 7 - c; }
-                highlights[r, c].Fill = Brushes.Transparent;
-            }
+            foreach (var rect in highlights) rect.Fill = Brushes.Transparent;
         }
 
-        private void SetCursor(Player player)
+        private void SetCursor(Player p)
         {
-            Cursor = (player == Player.White) ? ChessCursors.WhiteCursor : ChessCursors.BlackCursor;
+            Cursor = (p == Player.White) ? ChessCursors.WhiteCursor : ChessCursors.BlackCursor;
         }
-        #endregion
     }
 }

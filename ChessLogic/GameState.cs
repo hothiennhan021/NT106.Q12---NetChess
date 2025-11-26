@@ -17,41 +17,32 @@ namespace ChessLogic
         {
             CurrentPlayer = player;
             Board = board;
+            // QUAN TRỌNG: Bật dòng này để khi Client nhận bàn cờ về
+            // nó biết ngay là game đã kết thúc hay chưa (Checkmate/Stalemate)
             CheckForGameOver();
         }
 
         public IEnumerable<Move> LegalMovesForPiece(Position pos)
         {
-            if(Board.IsEmty(pos) || Board[pos].Color != CurrentPlayer)
-            {
-                return Enumerable.Empty<Move>();
-            }
-
-            Pieces piece = Board [pos];
-            IEnumerable<Move> moveCandidates = piece.GetMoves(pos, Board);
-            return moveCandidates.Where(move => move.IsLegal(Board));
-            
-
-        }
-
-        public IEnumerable<Move> MovesForPiece(Position pos)
-        {
+            // GIỮ NGUYÊN "IsEmty" (theo code cũ của bạn) để không bị lỗi đỏ
             if (Board.IsEmty(pos) || Board[pos].Color != CurrentPlayer)
             {
                 return Enumerable.Empty<Move>();
             }
 
             Pieces piece = Board[pos];
-            // Chỉ lấy các nước đi, KHÔNG kiểm tra IsLegal()
-            return piece.GetMoves(pos, Board);
+            IEnumerable<Move> moveCandidates = piece.GetMoves(pos, Board);
+            return moveCandidates.Where(move => move.IsLegal(Board));
         }
+
         public void MakeMove(Move move)
         {
             move.Execute(Board);
             CurrentPlayer = CurrentPlayer.Opponent();
 
-            // ****** TẮT VĨNH VIỄN DÒNG NÀY ĐI ******
-            // CheckForGameOver(); 
+            // Ở Client, chúng ta có thể tắt dòng này nếu muốn Server quyết định.
+            // Nhưng để an toàn cho logic hiển thị, bật nó lên cũng không sao.
+            CheckForGameOver();
         }
 
         public IEnumerable<Move> AllLegalMovesFor(Player player)
@@ -66,24 +57,37 @@ namespace ChessLogic
 
         private void CheckForGameOver()
         {
+            // Kiểm tra nếu không còn nước đi hợp lệ
             if (!AllLegalMovesFor(CurrentPlayer).Any())
             {
-                // Nếu không có nước đi hợp lệ, hãy kiểm tra xem Vua có đang bị chiếu không
                 if (Board.IsIncheck(CurrentPlayer))
                 {
-                    // Bị chiếu và không thể di chuyển -> Checkmate
+                    // Bị chiếu hết
                     Result = Result.Win(CurrentPlayer.Opponent());
                 }
                 else
                 {
-                    // Không bị chiếu và không thể di chuyển -> Stalemate
+                    // Hết nước đi (Hòa)
                     Result = Result.Draw(EndReason.Stalemate);
                 }
             }
         }
+
         public bool IsGameOver()
         {
             return Result != null;
+        }
+
+        // Hàm hỗ trợ lấy nước đi nhanh cho Client vẽ HighLight
+        public IEnumerable<Move> MovesForPiece(Position pos)
+        {
+            // GIỮ NGUYÊN "IsEmty"
+            if (Board.IsEmty(pos) || Board[pos].Color != CurrentPlayer)
+            {
+                return Enumerable.Empty<Move>();
+            }
+            Pieces piece = Board[pos];
+            return piece.GetMoves(pos, Board);
         }
     }
 }

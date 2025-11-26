@@ -11,17 +11,17 @@ namespace ChessLogic
         private readonly Pieces[,] pieces = new Pieces[8, 8];
         public Pieces this[int row, int col]
         {
-            get {return pieces[row, col];}
-            set { pieces[row, col] = value;}
+            get { return pieces[row, col]; }
+            set { pieces[row, col] = value; }
         }
-        public Pieces this [Position pos]
+        public Pieces this[Position pos]
         {
             get { return this[pos.Row, pos.Column]; }
-            set { this [pos.Row, pos.Column] = value;}
+            set { this[pos.Row, pos.Column] = value; }
         }
         public static Board Initial()
         {
-            Board board =new Board();
+            Board board = new Board();
             board.AddStartPieces();
             return board;
         }
@@ -29,11 +29,11 @@ namespace ChessLogic
         {
             this[0, 0] = new Rook(Player.Black);
             this[0, 1] = new Knight(Player.Black);
-            this[0, 2]=new Bishop(Player.Black);
-            this[0, 3]=new Queen(Player.Black);
-            this[0, 4]= new King(Player.Black);
+            this[0, 2] = new Bishop(Player.Black);
+            this[0, 3] = new Queen(Player.Black);
+            this[0, 4] = new King(Player.Black);
             this[0, 5] = new Bishop(Player.Black);
-            this[0, 6]=new Knight(Player.Black);
+            this[0, 6] = new Knight(Player.Black);
             this[0, 7] = new Rook(Player.Black);
 
             this[7, 0] = new Rook(Player.White);
@@ -45,10 +45,10 @@ namespace ChessLogic
             this[7, 6] = new Knight(Player.White);
             this[7, 7] = new Rook(Player.White);
 
-            for(int i=0;i<8;i++)
+            for (int i = 0; i < 8; i++)
             {
-                this[1, i]=new Pawn(Player.Black);
-                this[6, i]=new Pawn(Player.White);
+                this[1, i] = new Pawn(Player.Black);
+                this[6, i] = new Pawn(Player.White);
             }
         }
         public static bool IsInside(Position pos)
@@ -62,13 +62,13 @@ namespace ChessLogic
 
         public IEnumerable<Position> PiecePosition()
         {
-            for (int r=0; r<8;r++)
+            for (int r = 0; r < 8; r++)
             {
-                for (int c= 0; c<8;c++)
+                for (int c = 0; c < 8; c++)
                 {
                     Position pos = new Position(r, c);
 
-                    if(!IsEmty(pos))
+                    if (!IsEmty(pos))
                     {
                         yield return pos;
                     }
@@ -81,7 +81,7 @@ namespace ChessLogic
             return PiecePosition().Where(pos => this[pos].Color == player);
         }
 
-        public bool IsIncheck(Player player )
+        public bool IsIncheck(Player player)
         {
             return PiecePositionsFor(player.Opponent()).Any(pos =>
             {

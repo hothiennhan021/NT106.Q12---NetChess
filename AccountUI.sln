@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChessUI", "ChessUI\ChessUI.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChessLogic", "ChessLogic\ChessLogic.csproj", "{2BEBB27E-17AB-2D81-1D4E-0D319428DF9E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChessData", "ChessData\ChessData.csproj", "{E2240C43-7A97-45B2-80E4-743C2E8E14D5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChessClient", "ChessClient\ChessClient.csproj", "{2DECA466-61B8-4639-A35C-DB015936F6B8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +37,14 @@ Global
 		{2BEBB27E-17AB-2D81-1D4E-0D319428DF9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2BEBB27E-17AB-2D81-1D4E-0D319428DF9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2BEBB27E-17AB-2D81-1D4E-0D319428DF9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2240C43-7A97-45B2-80E4-743C2E8E14D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2240C43-7A97-45B2-80E4-743C2E8E14D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2240C43-7A97-45B2-80E4-743C2E8E14D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2240C43-7A97-45B2-80E4-743C2E8E14D5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2DECA466-61B8-4639-A35C-DB015936F6B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2DECA466-61B8-4639-A35C-DB015936F6B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2DECA466-61B8-4639-A35C-DB015936F6B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2DECA466-61B8-4639-A35C-DB015936F6B8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

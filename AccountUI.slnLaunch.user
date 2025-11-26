@@ -17,6 +17,14 @@
       {
         "Path": "ChessLogic\\ChessLogic.csproj",
         "Action": "Start"
+      },
+      {
+        "Path": "ChessData\\ChessData.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "ChessClient\\ChessClient.csproj",
+        "Action": "Start"
       }
     ]
   }

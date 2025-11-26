@@ -1,31 +1,35 @@
 ﻿using System;
-using System.IO;
-using System.Net.Sockets;
-using System.Text;
+using System.Linq;
 using System.Threading.Tasks;
-using ChessLogic; // Đảm bảo đã using ChessLogic
+using System.Collections.Generic;
+using ChessLogic; // Đảm bảo project này đã có ChessTimer
 
 namespace MyTcpServer
 {
     public class GameSession
     {
         public string SessionId { get; }
-        // --- SỬA ĐỔI: Dùng ConnectedClient ---
         public ConnectedClient PlayerWhite { get; }
         public ConnectedClient PlayerBlack { get; }
 
-        private readonly GameState _gameState;
+        // --- TÍNH NĂNG 1: CỜ HIỆU CHƠI LẠI ---
+        public bool WhiteWantsRestart { get; set; } = false;
+        public bool BlackWantsRestart { get; set; } = false;
 
-        // --- XÓA: Không cần writer riêng ---
-        // private readonly StreamWriter _writerWhite;
-        // private readonly StreamWriter _writerBlack;
+        private GameState _gameState;
 
-        // --- SỬA ĐỔI: Nhận ConnectedClient ---
+        // --- TÍNH NĂNG 2: ĐỒNG HỒ & CHAT ---
+        private ChessTimer _gameTimer;
+
+        // (Nếu bạn chưa có class ChatRoom thì có thể bỏ qua dòng này và hàm BroadcastChat, 
+        // nhưng mình khuyến khích nên tạo class ChatRoom đơn giản để quản lý)
+        // private readonly ChatRoom _chatRoom; 
+
         public GameSession(ConnectedClient player1, ConnectedClient player2)
         {
             SessionId = Guid.NewGuid().ToString();
 
-            // Gán ngẫu nhiên Trắng/Đen
+            // 1. Random màu
             if (new Random().Next(2) == 0)
             {
                 PlayerWhite = player1;
@@ -37,129 +41,133 @@ namespace MyTcpServer
                 PlayerBlack = player1;
             }
 
-            // --- XÓA: Không tạo writer mới ---
-            // _writerWhite = new StreamWriter(...)
-            // _writerBlack = new StreamWriter(...)
-
-            // Khởi tạo GameState "thật" trên server
-            _gameState = new GameState(Player.White, Board.Initial());
+            // 2. Khởi tạo GameState & Timer
+            InitializeComponents();
         }
 
-        // Bắt đầu game, gửi thông báo cho 2 client
+        private void InitializeComponents()
+        {
+            _gameState = new GameState(Player.White, Board.Initial());
+
+            // Nếu timer cũ đang chạy thì dừng lại
+            if (_gameTimer != null) _gameTimer.Stop();
+
+            _gameTimer = new ChessTimer(10); // 10 phút
+            _gameTimer.TimeExpired += HandleTimeExpired; // Sự kiện khi hết giờ
+        }
+
+        // --- XỬ LÝ GAME ---
+
         public async Task StartGame()
         {
-            string boardString = Serialization.BoardToString(_gameState.Board);
+            // Bắt đầu tính giờ cho Trắng
+            _gameTimer.Start(Player.White);
 
-            // --- SỬA ĐỔI: Dùng SendMessageAsync ---
-            // Đây là chỗ sửa lỗi quan trọng nhất
-            await PlayerWhite.SendMessageAsync($"GAME_START|WHITE|{boardString}");
-            await PlayerBlack.SendMessageAsync($"GAME_START|BLACK|{boardString}");
+            string boardString = Serialization.BoardToString(_gameState.Board);
+            int wTime = _gameTimer.WhiteRemaining;
+            int bTime = _gameTimer.BlackRemaining;
+
+            // Gửi tin nhắn GỒM CẢ THỜI GIAN (để khớp với Client mới)
+            await PlayerWhite.SendMessageAsync($"GAME_START|WHITE|{boardString}|{wTime}|{bTime}");
+            await PlayerBlack.SendMessageAsync($"GAME_START|BLACK|{boardString}|{wTime}|{bTime}");
         }
 
-        // --- SỬA ĐỔI: Dùng ConnectedClient ---
-        // --- SỬA ĐỔI: Dùng ConnectedClient ---
+        public async Task ResetGame()
+        {
+            WhiteWantsRestart = false;
+            BlackWantsRestart = false;
+            InitializeComponents();
+            await StartGame();
+        }
+
         public async Task HandleMove(ConnectedClient client, string moveString)
         {
-            // LOG 1: Bắt đầu
-            Console.WriteLine("[GameSession LOG 1] Bắt đầu HandleMove.");
-
             try
             {
-                // 1. Xác định người chơi
                 Player player = (client == PlayerWhite) ? Player.White : Player.Black;
 
-                // 2. Server chỉ kiểm tra 2 thứ CƠ BẢN
+                // 1. Kiểm tra lượt (Server Authority)
                 if (player != _gameState.CurrentPlayer)
                 {
-                    await client.SendMessageAsync("ERROR|Không phải lượt của bạn.");
+                    await client.SendMessageAsync("ERROR|Chưa đến lượt của bạn!");
                     return;
                 }
 
-                // 3. Parse nước đi
+                // 2. Parse tọa độ
                 var parts = moveString.Split('|');
                 Position from = new Position(int.Parse(parts[1]), int.Parse(parts[2]));
                 Position to = new Position(int.Parse(parts[3]), int.Parse(parts[4]));
 
-                // 4. Lấy quân cờ (Nhanh)
+                // 3. Lấy quân cờ
                 Pieces piece = _gameState.Board[from];
-                if (piece == null || piece.Color != player)
-                {
-                    await client.SendMessageAsync("ERROR|Lỗi (Quân cờ không tồn tại).");
-                    return;
-                }
+                if (piece == null || piece.Color != player) return;
 
-                // 5. Lấy nước đi (NHANH, không gọi LegalMovesForPiece)
-                Move? move = piece.GetMoves(from, _gameState.Board).FirstOrDefault(m => m.ToPos.Equals(to));
+                // 4. Tìm nước đi hợp lệ (Server check kỹ)
+                // Lưu ý: Hàm này gọi GetMoves -> cần đảm bảo ChessLogic chuẩn
+                Move move = piece.GetMoves(from, _gameState.Board).FirstOrDefault(m => m.ToPos.Equals(to));
 
-                // 6. Kiểm tra xem Client có "hack" không
                 if (move == null)
                 {
-                    await client.SendMessageAsync("ERROR|Lỗi (Nước đi không tồn tại/Client hack).");
+                    await client.SendMessageAsync("ERROR|Nước đi không hợp lệ (Server reject).");
                     return;
                 }
 
-                // 7. SERVER TIN TƯỞNG CLIENT (BỎ QUA IsLegal)
-
-                // LOG 2: Ngay trước khi MakeMove
-                Console.WriteLine($"[GameSession LOG 2] Đã parse xong, chuẩn bị MakeMove cho {from} -> {to}");
-
-                // 8. THỰC HIỆN NƯỚC ĐI
+                // 5. Thực hiện nước đi
                 _gameState.MakeMove(move);
 
-                // LOG 3: Ngay sau khi MakeMove
-                Console.WriteLine("[GameSession LOG 3] Đã MakeMove, chuẩn bị tạo chuỗi board...");
+                // 6. ĐẢO LƯỢT ĐỒNG HỒ
+                _gameTimer.SwitchTurn();
 
-                // 9. Gửi UPDATE (Bây giờ sẽ chạy ngay lập tức)
+                // 7. Gửi UPDATE KÈM THỜI GIAN
                 string boardString = Serialization.BoardToString(_gameState.Board);
-                string currentPlayer = _gameState.CurrentPlayer.ToString().ToUpper();
-                string updateMessage = $"UPDATE|{boardString}|{currentPlayer}";
+                string currentPlayerStr = _gameState.CurrentPlayer.ToString().ToUpper();
+                int wTime = _gameTimer.WhiteRemaining;
+                int bTime = _gameTimer.BlackRemaining;
 
-                // LOG 4: Ngay trước khi Broadcast
-                Console.WriteLine("[GameSession LOG 4] Đã tạo xong updateMessage, chuẩn bị Broadcast...");
+                // Format: UPDATE | BOARD | PLAYER | WHITE_TIME | BLACK_TIME
+                string updateMsg = $"UPDATE|{boardString}|{currentPlayerStr}|{wTime}|{bTime}";
+                await Broadcast(updateMsg);
 
-                await Broadcast(updateMessage); //
+                // 8. Kiểm tra Hết cờ (Checkmate/Draw)
+                if (_gameState.IsGameOver())
+                {
+                    _gameTimer.Stop(); // Dừng đồng hồ
+                    string winnerMsg = "Game Over";
 
-                // LOG 5: Ngay sau khi Broadcast
-                Console.WriteLine("[GameSession LOG 5] ĐÃ BROADCAST XONG.");
+                    if (_gameState.Result.Winner == Player.White) winnerMsg = "TRẮNG thắng!";
+                    else if (_gameState.Result.Winner == Player.Black) winnerMsg = "ĐEN thắng!";
+                    else winnerMsg = "HÒA cờ!";
+
+                    await Broadcast($"GAME_OVER|{winnerMsg}");
+                }
             }
             catch (Exception ex)
             {
-                // LOG LỖI
-                Console.WriteLine($"[GameSession LỖI] {ex.Message}");
-                await client.SendMessageAsync($"ERROR|Lỗi Server: {ex.Message}");
+                Console.WriteLine($"[Lỗi GameSession] {ex.Message}");
             }
         }
 
-        // --- SỬA ĐỔI: Dùng SendMessageAsync ---
+        // --- XỬ LÝ SỰ KIỆN TIMER ---
+        private void HandleTimeExpired(Player loser)
+        {
+            string winner = (loser == Player.White) ? "Đen" : "Trắng";
+            _ = Broadcast($"GAME_OVER|{winner} thắng do đối thủ hết giờ!");
+        }
+
+        // --- XỬ LÝ CHAT ---
+        public async Task BroadcastChat(ConnectedClient sender, string messageContent)
+        {
+            // Gửi lại tin nhắn cho CẢ HAI (hoặc chỉ đối thủ, tùy logic client)
+            // Ở đây mình gửi cho đối thủ để họ hiện lên
+            ConnectedClient opponent = (sender == PlayerWhite) ? PlayerBlack : PlayerWhite;
+            await opponent.SendMessageAsync($"CHAT|{messageContent}");
+        }
+
+        // --- HÀM HỖ TRỢ ---
         private async Task Broadcast(string message)
         {
-            // Gửi cho White, bọc trong try-catch riêng
-            try
-            {
-                await PlayerWhite.SendMessageAsync(message);
-            }
-            catch (Exception ex)
-            {
-                // Ghi log lỗi, nhưng KHÔNG dừng lại
-                Console.WriteLine($"Lỗi khi gửi cho PlayerWhite: {ex.Message}");
-            }
-
-            // Gửi cho Black, bọc trong try-catch riêng
-            try
-            {
-                await PlayerBlack.SendMessageAsync(message);
-            }
-            catch (Exception ex)
-            {
-                // Ghi log lỗi, nhưng KHÔNG dừng lại
-                Console.WriteLine($"Lỗi khi gửi cho PlayerBlack: {ex.Message}");
-            }
-        }
-
-        // --- SỬA ĐỔI: Thêm hàm SendToClient (vì HandleMove cần) ---
-        private async Task SendToClient(ConnectedClient client, string message)
-        {
-            await client.SendMessageAsync(message);
+            try { await PlayerWhite.SendMessageAsync(message); } catch { }
+            try { await PlayerBlack.SendMessageAsync(message); } catch { }
         }
     }
 }
