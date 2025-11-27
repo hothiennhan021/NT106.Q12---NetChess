@@ -47,7 +47,14 @@ namespace ChessLogic
 
             return board[pos].Color != Color;
         }
-
+        //Tao chức năng phong hậu
+        private static IEnumerable<Move> PromotionMoves(Position from, Position to)
+        {
+            yield return new PawnPromotion(from, to, PieceType.Knight);
+            yield return new PawnPromotion(from, to, PieceType.Bishop);
+            yield return new PawnPromotion(from, to, PieceType.Rook);
+            yield return new PawnPromotion(from, to, PieceType.Queen);
+        }
         private IEnumerable<Move> ForwardMoves(Position from, Board board)
         {
             // Tính vị trí 1 bước tiến
@@ -56,9 +63,18 @@ namespace ChessLogic
             // Kiểm tra xem có thể đi 1 bước không
             if (CanMoveTo(oneMovePos, board))
             {
-                // Nếu được, thêm nước đi 1 bước
-                yield return new NormalMove(from, oneMovePos);
+                if(oneMovePos.Row==0 || oneMovePos.Row==7)
+                {
+                    foreach(Move promMove in PromotionMoves(from,oneMovePos))
+                    {
+                        yield return promMove;
+                    }
+                }
+                else
+                {
+                    yield return new NormalMove(from,oneMovePos);
 
+                }
                 // Tính vị trí 2 bước tiến
                 Position twoMovePos = oneMovePos + forward; // (hoặc from + 2 * forward)
 
@@ -80,7 +96,18 @@ namespace ChessLogic
 
                 if(CanCaptureAt(to, board))
                 {
-                    yield return new NormalMove(from, to);
+                    if (to.Row == 0 || to.Row == 7)
+                    {
+                        foreach (Move promMove in PromotionMoves(from, to))
+                        {
+                            yield return promMove;
+                        }
+                    }
+                    else
+                    {
+                        yield return new NormalMove(from, to);
+
+                    }
                 }
             }
         }
