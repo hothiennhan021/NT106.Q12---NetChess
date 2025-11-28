@@ -171,18 +171,40 @@ namespace ChessUI
                 {
                     while (!_isExiting && _networkClient.IsConnected)
                     {
-                        string msg = _networkClient.WaitForMessage();
+                        // SỬA ĐỔI QUAN TRỌNG TẠI ĐÂY:
+                        // Thay vì chờ mãi mãi, chỉ chờ 500ms (0.5 giây)
+                        string msg = _networkClient.WaitForMessage(500);
+
+                        // 1. Kiểm tra xem có đang thoát không (để giết luồng thây ma)
                         if (_isExiting) break;
 
+                        // 2. Nếu hết 500ms mà không có tin nhắn (TIMEOUT) -> Quay lại đầu vòng lặp để check tiếp
+                        if (msg == "TIMEOUT") continue;
+
+                        // 3. Nếu mất kết nối thật sự
                         if (msg == null)
                         {
-                            if (!_isExiting) Dispatcher.Invoke(() => { if (!_isExiting) { MessageBox.Show("Mất kết nối!"); Close(); } });
+                            if (!_isExiting)
+                            {
+                                Dispatcher.Invoke(() => {
+                                    if (!_isExiting)
+                                    {
+                                        MessageBox.Show("Mất kết nối server!");
+                                        Close();
+                                    }
+                                });
+                            }
                             break;
                         }
+
+                        // 4. Xử lý tin nhắn bình thường
                         Dispatcher.Invoke(() => _responseHandler.ProcessMessage(msg));
                     }
                 }
-                catch { if (!_isExiting) Dispatcher.Invoke(() => Close()); }
+                catch (Exception)
+                {
+                    if (!_isExiting) Dispatcher.Invoke(() => Close());
+                }
             });
         }
 

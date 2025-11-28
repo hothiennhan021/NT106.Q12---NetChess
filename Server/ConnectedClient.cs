@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace MyTcpServer
 {
+    // Class này để gói gọn TcpClient lại, giúp Server quản lý dễ hơn
     public class ConnectedClient
     {
         public TcpClient Client { get; }
@@ -25,13 +26,12 @@ namespace MyTcpServer
             try
             {
                 if (!Client.Connected) return;
-
                 await Writer.WriteLineAsync(message);
-                await Writer.FlushAsync(); // QUAN TRỌNG: Đẩy tin đi ngay lập tức
+                await Writer.FlushAsync();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Send Error: {ex.Message}");
+                Console.WriteLine($"Gửi lỗi: {ex.Message}");
             }
         }
     }

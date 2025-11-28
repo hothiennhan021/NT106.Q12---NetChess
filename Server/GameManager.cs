@@ -1,84 +1,103 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace MyTcpServer
 {
     public static class GameManager
     {
-        private static readonly ConcurrentQueue<ConnectedClient> _waitingLobby = new ConcurrentQueue<ConnectedClient>();
+        private static readonly List<ConnectedClient> _waitingLobby = new List<ConnectedClient>();
+        private static readonly object _lobbyLock = new object();
         private static readonly ConcurrentDictionary<ConnectedClient, GameSession> _activeGames = new ConcurrentDictionary<ConnectedClient, GameSession>();
 
         public static void HandleClientConnect(ConnectedClient client) { }
 
         public static void HandleClientDisconnect(ConnectedClient client)
         {
+            // Xóa khỏi hàng đợi nếu đang chờ
+            lock (_lobbyLock) { _waitingLobby.Remove(client); }
+
+            // Xử lý nếu đang trong game
             if (_activeGames.TryRemove(client, out GameSession session))
             {
-                // --- CHỈ GỬI THÔNG BÁO THOÁT NẾU GAME CHƯA KẾT THÚC ---
-                if (session.IsGameOver() == false)
+                if (!session.IsGameOver())
                 {
-                    ConnectedClient otherPlayer = (session.PlayerWhite == client) ? session.PlayerBlack : session.PlayerWhite;
+                    // Tìm người còn lại
+                    var other = (session.PlayerWhite == client) ? session.PlayerBlack : session.PlayerWhite;
 
-                    // Gửi tin nhắn cho người còn lại (Client sẽ hiểu Resigned là game over)
-                    _ = otherPlayer.SendMessageAsync("GAME_OVER_FULL|Đối thủ đã rời game!|Resigned");
+                    // Gửi tin nhắn thắng cuộc cho người còn lại
+                    _ = other.SendMessageAsync("GAME_OVER_FULL|Đối thủ thoát|Resigned");
 
-                    // Xóa đối thủ khỏi activeGames
-                    _activeGames.TryRemove(otherPlayer, out GameSession dummy);
+                    // Xóa người còn lại khỏi danh sách active luôn
+                    _activeGames.TryRemove(other, out _);
                 }
-
-                Console.WriteLine($"GameSession {session.SessionId} kết thúc do người chơi thoát.");
             }
         }
 
         public static async Task ProcessGameCommand(ConnectedClient client, string command)
         {
             var parts = command.Split('|');
-            string action = parts[0];
 
-            if (action == "FIND_GAME")
+            // Xử lý tìm trận
+            if (parts[0] == "FIND_GAME")
             {
                 await AddToLobby(client);
                 return;
             }
 
+            // Xử lý các lệnh trong game
             if (_activeGames.TryGetValue(client, out GameSession session))
             {
-                switch (action)
+                if (parts[0] == "MOVE")
+                    await session.HandleMove(client, command);
+                else if (parts[0] == "CHAT" && parts.Length > 1)
+                    await session.BroadcastChat(client, parts[1]);
+                else
                 {
-                    case "MOVE":
-                        await session.HandleMove(client, command);
-                        break;
-                    case "CHAT":
-                        if (parts.Length > 1) await session.BroadcastChat(client, parts[1]);
-                        break;
+                    await session.HandleGameCommand(client, parts[0]);
 
-                    // --- CHUYỂN LỆNH HỆ THỐNG CHO GAMESESSION ---
-                    case "REQUEST_RESTART":
-                    case "RESTART_NO":
-                    case "LEAVE_GAME":
-                        await session.HandleGameCommand(client, action);
-                        break;
+                    // Nếu là lệnh thoát, dọn dẹp ngay lập tức
+                    if (parts[0] == "LEAVE_GAME")
+                    {
+                        _activeGames.TryRemove(session.PlayerWhite, out _);
+                        _activeGames.TryRemove(session.PlayerBlack, out _);
+                    }
                 }
             }
         }
 
         private static async Task AddToLobby(ConnectedClient client)
         {
-            _waitingLobby.Enqueue(client);
+            GameSession sessionToStart = null;
 
-            if (_waitingLobby.Count >= 2)
+            // BƯỚC 1: Thao tác với hàng đợi (Cần Lock)
+            lock (_lobbyLock)
             {
-                if (_waitingLobby.TryDequeue(out ConnectedClient player1) &&
-                    _waitingLobby.TryDequeue(out ConnectedClient player2))
+                _waitingLobby.RemoveAll(c => !c.Client.Connected); // Dọn dẹp kết nối chết
+
+                if (!_waitingLobby.Contains(client))
+                    _waitingLobby.Add(client);
+
+                // Nếu đủ 2 người thì ghép cặp
+                if (_waitingLobby.Count >= 2)
                 {
-                    GameSession newSession = new GameSession(player1, player2);
+                    var p1 = _waitingLobby[0];
+                    var p2 = _waitingLobby[1];
+                    _waitingLobby.RemoveRange(0, 2); // Xóa 2 người khỏi hàng đợi
 
-                    _activeGames[player1] = newSession;
-                    _activeGames[player2] = newSession;
-
-                    await newSession.StartGame();
+                    // Tạo session mới
+                    sessionToStart = new GameSession(p1, p2);
+                    _activeGames[p1] = sessionToStart;
+                    _activeGames[p2] = sessionToStart;
                 }
+            }
+            // KẾT THÚC LOCK TẠI ĐÂY
+
+            // BƯỚC 2: Gửi tin nhắn mạng (Async - Không được nằm trong Lock)
+            if (sessionToStart != null)
+            {
+                await sessionToStart.StartGame();
             }
             else
             {
