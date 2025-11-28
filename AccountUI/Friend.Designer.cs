@@ -28,8 +28,10 @@
         /// </summary>
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
             tabControl1 = new TabControl();
             tabList = new TabPage();
+            btnInvite = new Button();
             lbFriends = new ListBox();
             btnRefresh = new Button();
             tabSearch = new TabPage();
@@ -40,6 +42,7 @@
             btnSearch = new Button();
             txtSearch = new TextBox();
             label1 = new Label();
+            timerCheckMail = new System.Windows.Forms.Timer(components);
             tabControl1.SuspendLayout();
             tabList.SuspendLayout();
             tabSearch.SuspendLayout();
@@ -59,6 +62,7 @@
             // 
             // tabList
             // 
+            tabList.Controls.Add(btnInvite);
             tabList.Controls.Add(lbFriends);
             tabList.Controls.Add(btnRefresh);
             tabList.Location = new Point(4, 29);
@@ -70,12 +74,23 @@
             tabList.Text = "Danh sách bạn bè";
             tabList.UseVisualStyleBackColor = true;
             // 
+            // btnInvite
+            // 
+            btnInvite.Location = new Point(6, 383);
+            btnInvite.Margin = new Padding(3, 4, 3, 4);
+            btnInvite.Name = "btnInvite";
+            btnInvite.Size = new Size(526, 53);
+            btnInvite.TabIndex = 3;
+            btnInvite.Text = "Invite";
+            btnInvite.UseVisualStyleBackColor = true;
+            btnInvite.Click += btnInvite_Click;
+            // 
             // lbFriends
             // 
             lbFriends.FormattingEnabled = true;
             lbFriends.Location = new Point(8, 23);
             lbFriends.Name = "lbFriends";
-            lbFriends.Size = new Size(526, 424);
+            lbFriends.Size = new Size(526, 344);
             lbFriends.TabIndex = 2;
             // 
             // btnRefresh
@@ -175,6 +190,12 @@
             label1.TabIndex = 0;
             label1.Text = "Nhập tên người chơi:";
             // 
+            // timerCheckMail
+            // 
+            timerCheckMail.Enabled = true;
+            timerCheckMail.Interval = 3000;
+            timerCheckMail.Tick += timerCheckMail_Tick;
+            // 
             // Friend
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
@@ -208,5 +229,7 @@
         private System.Windows.Forms.ListBox lbRequests;
         private Button btnRefreshRequest;
         private ListBox lbFriends;
+        private Button btnInvite;
+        private System.Windows.Forms.Timer timerCheckMail;
     }
 }

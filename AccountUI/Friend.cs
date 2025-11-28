@@ -190,5 +190,113 @@ namespace AccountUI
         {
             LoadFriendList();
         }
+
+        // 1. Sự kiện bấm nút "Mời chơi cờ"
+        private void btnInvite_Click(object sender, EventArgs e)
+        {
+            if (lbFriends.SelectedItem == null)
+            {
+                MessageBox.Show("Hãy chọn một người bạn đang Online để mời!");
+                return;
+            }
+
+            // ListBox hiện: "trung123 (Elo: 1000) - [Online]"
+            string selected = lbFriends.SelectedItem.ToString();
+
+            // Kiểm tra xem bạn đó có Online không
+            if (!selected.Contains("[Online]"))
+            {
+                MessageBox.Show("Người này đang Offline, không mời được đâu!");
+                return;
+            }
+
+            // Cắt lấy tên (Lấy chữ đầu tiên trước dấu cách)
+            string friendName = selected.Split(' ')[0];
+
+            // Gửi lệnh mời
+            string response = ClientSocket.SendAndReceive($"FRIEND_INVITE|{friendName}");
+
+            if (response.Contains("SUCCESS"))
+            {
+                MessageBox.Show($"Đã gửi lời thách đấu tới {friendName}!");
+            }
+            else
+            {
+                MessageBox.Show("Lỗi: " + response);
+            }
+        }
+
+        // 2. Sự kiện Timer (Tự động chạy mỗi 3 giây để check thư)
+        // 1. Sự kiện Timer (Tự động chạy mỗi 3 giây để check thư)
+        private void timerCheckMail_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                string response = ClientSocket.SendAndReceive("CHECK_MAIL");
+                if (response == "EMPTY" || response.StartsWith("ERROR")) return;
+
+                string[] parts = response.Split('|');
+                string type = parts[0];
+                string senderName = parts[1];
+
+                // 1. KHI ĐƯỢC MỜI (Người nhận - Quân Đen)
+                if (type == "INVITE")
+                {
+                    timerCheckMail.Stop();
+                    DialogResult dr = MessageBox.Show(
+                        $"{senderName} đang thách đấu bạn! Chiến không?",
+                        "Thách đấu", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                    if (dr == DialogResult.Yes)
+                    {
+                        // Gửi đồng ý
+                        ClientSocket.SendAndReceive($"FRIEND_RESPONSE|{senderName}|ACCEPTED");
+
+                        // --- [QUAN TRỌNG] MỞ BÀN CỜ LUÔN ---
+                        MoBanCo(isWhite: false); // False = Quân Đen
+                                                 // -----------------------------------
+                    }
+                    timerCheckMail.Start();
+                }
+
+                // 2. KHI ĐỐI PHƯƠNG ĐỒNG Ý (Người gửi - Quân Trắng)
+                else if (type == "RESPONSE" && parts[2] == "ACCEPTED")
+                {
+                    timerCheckMail.Stop();
+                    MessageBox.Show($"{senderName} đã chấp nhận! Vào game thôi!");
+
+                    // --- [QUAN TRỌNG] MỞ BÀN CỜ LUÔN ---
+                    MoBanCo(isWhite: true); // True = Quân Trắng
+                                            // -----------------------------------
+
+                    timerCheckMail.Start();
+                }
+            }
+            catch { }
+        }
+
+        // 2. Hàm phụ để mở bàn cờ (Đã sửa để truyền Phe)
+        private void MoBanCo(bool isWhite)
+        {
+            this.Hide(); // Ẩn form bạn bè đi
+
+            try
+            {
+                // Logic: Người mời đi trước (WHITE), Người nhận đi sau (BLACK)
+                string side = isWhite ? "WHITE" : "BLACK";
+
+                // Khởi tạo bàn cờ từ Project ChessUI
+                // Truyền "WHITE" hoặc "BLACK" vào để bàn cờ biết đường xếp quân
+                ChessUI.MainWindow gameWindow = new ChessUI.MainWindow(side);
+
+                gameWindow.ShowDialog(); // Mở lên và chờ chơi xong
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Không thể mở bàn cờ (Kiểm tra lại Reference): " + ex.Message);
+            }
+
+            this.Show(); // Hiện lại form bạn bè sau khi chơi xong
+        }
     }
 }

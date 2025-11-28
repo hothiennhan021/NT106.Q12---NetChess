@@ -31,7 +31,7 @@ namespace ChessUI
         private Position selectedPos = null;
         private Player _myColor;
 
-        private NetworkClient _networkClient;
+        private ChessClient.NetworkClient _networkClient;
         private ServerResponseHandler _responseHandler;
         private ChessTimer _gameTimer;
 
@@ -41,16 +41,50 @@ namespace ChessUI
             LoadBoardImageSafe();
             InitializedBoard();
 
-            _networkClient = ClientManager.Instance;
+            _networkClient = ChessClient.ClientManager.Instance;
             _responseHandler = new ServerResponseHandler();
             _gameTimer = new ChessTimer(10);
+            lblWhiteTime.Text = "10:00";
+            lblBlackTime.Text = "10:00";
+
+            // --- [THÊM MỚI] XỬ LÝ KHỞI TẠO BÀN CỜ NGAY LẬP TỨC ---
+            if (gameStartMessage == "WHITE")
+            {
+                _myColor = Player.White;
+                Title = "Chess Online - Bạn cầm quân TRẮNG";
+                lblWhitePlayerName.Text = "Bạn (White)";
+                lblBlackPlayerName.Text = "Đối thủ";
+
+                // Khởi tạo bàn cờ mới
+                _localGameState = new GameState(Player.White, Board.Initial());
+                DrawBoard(_localGameState.Board);
+            }
+            else if (gameStartMessage == "BLACK")
+            {
+                _myColor = Player.Black;
+                Title = "Chess Online - Bạn cầm quân ĐEN";
+                lblWhitePlayerName.Text = "Đối thủ";
+                lblBlackPlayerName.Text = "Bạn (Black)";
+
+                // Khởi tạo bàn cờ mới
+                _localGameState = new GameState(Player.White, Board.Initial());
+                DrawBoard(_localGameState.Board);
+            }
+            // -----------------------------------------------------
 
             RegisterEvents();
 
             try
             {
                 if (!_networkClient.IsConnected) throw new Exception("Mất kết nối.");
-                _responseHandler.ProcessMessage(gameStartMessage);
+
+                // Nếu là lệnh WHITE/BLACK thì không cần process qua handler nữa (vì mình đã init ở trên rồi)
+                // Chỉ process nếu nó là chuỗi "GAME_STARTED|..." của chế độ ghép trận
+                if (gameStartMessage.Contains("|"))
+                {
+                    _responseHandler.ProcessMessage(gameStartMessage);
+                }
+
                 StartServerListener();
             }
             catch (Exception ex)

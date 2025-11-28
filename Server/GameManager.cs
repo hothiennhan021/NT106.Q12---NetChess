@@ -85,5 +85,33 @@ namespace MyTcpServer
                 await client.SendMessageAsync("WAITING");
             }
         }
+
+        public static async Task StartFriendMatch(ConnectedClient player1, ConnectedClient player2)
+        {
+            // Tạo session mới
+            GameSession newSession = new GameSession(player1, player2);
+
+            // --- ĐOẠN QUAN TRỌNG: ĐĂNG KÝ CẢ 2 LOẠI KẾT NỐI ---
+            // (Vì chúng ta không biết Client đang dùng dây nào để gửi lệnh MOVE)
+
+            // Lưu kết nối hiện tại (Friend connection) vào danh sách Active Games
+            _activeGames.AddOrUpdate(player1, newSession, (k, v) => newSession);
+            _activeGames.AddOrUpdate(player2, newSession, (k, v) => newSession);
+
+            // Lưu thêm kết nối Game (nếu tìm thấy trong danh bạ GameUsers)
+            // Để nếu Client lỡ dùng dây Game gửi lệnh thì vẫn xử lý được
+            int p1ID = player1.UserId;
+            int p2ID = player2.UserId;
+
+            if (Program.GameUsers.TryGetValue(p1ID, out ConnectedClient gameClient1))
+                _activeGames.AddOrUpdate(gameClient1, newSession, (k, v) => newSession);
+
+            if (Program.GameUsers.TryGetValue(p2ID, out ConnectedClient gameClient2))
+                _activeGames.AddOrUpdate(gameClient2, newSession, (k, v) => newSession);
+            // ---------------------------------------------------
+
+            Console.WriteLine($"[FRIEND MATCH] Bắt đầu trận đấu...");
+            await newSession.StartGame();
+        }
     }
 }

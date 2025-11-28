@@ -15,6 +15,8 @@ namespace MyTcpServer
         // [QUAN TRỌNG] Biến này để lưu ID người dùng sau khi đăng nhập thành công
         // Mặc định là 0 (chưa đăng nhập)
         public int UserId { get; set; } = 0;
+        public string Username { get; set; } = ""; // <-- Cái này đang thiếu nè
+        public System.Collections.Generic.List<string> Mailbox { get; set; } = new System.Collections.Generic.List<string>(); // <-- Cái này dùng cho hộp thư
 
         public ConnectedClient(TcpClient client)
         {
@@ -22,6 +24,7 @@ namespace MyTcpServer
             var stream = client.GetStream();
             Reader = new StreamReader(stream, Encoding.UTF8);
             Writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = false };
+
         }
 
         // Hàm gửi tin nhắn an toàn, không gây crash server nếu client rớt mạng
