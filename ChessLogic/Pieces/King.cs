@@ -26,6 +26,47 @@ namespace ChessLogic
         {
             Color = color;
         }
+        //ham de castling
+        private static bool IsUnmovedRook(Position pos,Board board)
+        {
+            if(board.IsEmty(pos))
+            {
+                return false;
+            }
+            Pieces piece = board[pos];
+            return piece.Type == PieceType.Rook && !piece.HasMoved;
+        }
+
+        private static bool AllEmpty(IEnumerable<Position> positions,Board board)
+        {
+            return positions.All(pos => board.IsEmty(pos));
+        }
+
+        private bool CanCastleKingSide(Position from,Board board)
+        {
+            if(HasMoved)
+            {
+                return false;
+            }
+
+            Position rookPos = new Position(from.Row, 7);
+            Position[] betweenPositions = new Position[] { new(from.Row, 5), new(from.Row, 6) };
+
+            return IsUnmovedRook(rookPos,board) && AllEmpty(betweenPositions, board);
+        }
+        //ham Castling
+        private bool CanCastleQueenSide(Position from,Board board)
+        {
+            if(HasMoved)
+            {
+                return false;
+            }
+            Position rookPos = new Position(from.Row, 0);
+            Position[] betweenPositions = new Position[] {new(from.Row, 1),new(from.Row, 2), new(from.Row, 3) };
+
+            return IsUnmovedRook(rookPos, board) && AllEmpty(betweenPositions, board);
+        }
+
         public override Pieces Copy()
         {
             King copy = new King(Color);
@@ -57,6 +98,16 @@ namespace ChessLogic
             foreach (Position to in MovePositions(from, board))
             {
                 yield return new NormalMove(from, to);
+            }
+            //Castling
+            if(CanCastleKingSide(from,board))
+            {
+                yield return new Castle(MoveType.CastleKS,from);
+            }
+            //Castling
+            if(CanCastleQueenSide(from,board))
+            {
+                yield return new Castle(MoveType.CastleQS,from);   
             }
         }
 
