@@ -11,7 +11,7 @@ namespace AccountUI
 
         // --- CẤU HÌNH IP SERVER AWS ---
         // Đây là IP Public của máy EC2 bạn vừa tạo
-        private const string SERVER_IP = "54.66.192.227";
+        private const string SERVER_IP = "20.2.251.78";
         private const int PORT = 8888;
 
         // Hàm kết nối (được gọi tự động)

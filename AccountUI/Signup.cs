@@ -12,19 +12,18 @@ namespace AccountUI
             InitializeComponent();
         }
 
-
         private void button1_Click(object sender, EventArgs e)
         {
-            // --- 1. Lấy dữ liệu từ TẤT CẢ các ô ---
-            string tentk = textBox1.Text;
+            // --- 1. Lấy dữ liệu từ TẤT CẢ các ô ---
+            string tentk = textBox1.Text;
             string email = textBox2.Text;
             string matkhau = textBox3.Text;
             string xnmatkhau = textBox4.Text;
             string fullName = txtFullName.Text; // Lấy từ control mới
-            string birthday = dtpBirthday.Value.ToString("yyyy-MM-dd"); // Lấy từ control mới
+            string birthday = dtpBirthday.Value.ToString("yyyy-MM-dd"); // Lấy từ control mới
 
-            // --- 2. Kiểm tra dữ liệu (Giữ nguyên logic cũ của bạn) ---
-            if (!Regex.IsMatch(tentk, @"^[A-Za-z0-9]{6,24}$") || tentk == "Tên Đăng Nhập")
+            // --- 2. Kiểm tra dữ liệu (Giữ nguyên logic cũ của bạn) ---
+            if (!Regex.IsMatch(tentk, @"^[A-Za-z0-9]{6,24}$") || tentk == "Tên Đăng Nhập")
             {
                 MessageBox.Show("Vui lòng nhập tên tài khoản dài 6-24 ký tự...", "Chú Ý");
                 return;
@@ -50,34 +49,46 @@ namespace AccountUI
                 return;
             }
 
-            // --- 3. Xóa bỏ kiểm tra SQL cũ ---
-            // (Server sẽ làm việc này)
+            // --- 3. Không kiểm tra SQL ở client, để server xử lý ---
 
-            try
+            try
             {
-                // --- 4. Thay thế bằng code Socket ---
+                // --- 4. Tạo request theo giao thức đã thống nhất ---
+                string request = $"REGISTER|{tentk}|{matkhau}|{email}|{fullName}|{birthday}";
 
-                // Bước 4.1: Mã hóa mật khẩu
-                //string hashedPassword = PasswordHasher.HashPassword(matkhau);
+                // --- 5. Gửi và nhận phản hồi (ClientSocket tự Connect bên trong) ---
+                string response = ClientSocket.SendAndReceive(request);
 
-                // Bước 4.2: Tạo yêu cầu (theo giao thức đã thống nhất)
-                string request = $"REGISTER|{tentk}|{matkhau}|{email}|{fullName}|{birthday}";
-
-                // Bước 4.3: Gửi và nhận phản hồi
-                string response = ClientSocket.SendAndReceive(request);
-                string[] parts = response.Split('|');
-                string command = parts[0];
-
-                // Bước 4.4: Xử lý phản hồi
-                if (command == "REGISTER_SUCCESS")
+                if (string.IsNullOrWhiteSpace(response))
                 {
-                    MessageBox.Show("Đăng ký thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("Server không phản hồi.", "Lỗi",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Dọn sạch chuỗi phản hồi
+                string raw = response.Trim();
+                string[] parts = raw.Split('|');
+                string command = parts[0].Trim().Replace("\uFEFF", string.Empty);
+
+                // --- 6. Xử lý phản hồi ---
+                if (string.Equals(command, "REGISTER_SUCCESS", StringComparison.OrdinalIgnoreCase))
+                {
+                    string msg = (parts.Length > 1) ? parts[1] : "Đăng ký thành công!";
+                    MessageBox.Show(msg, "Thông báo",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
                     this.Close(); // Đóng form đăng ký
-                }
+                }
+                else if (string.Equals(command, "ERROR", StringComparison.OrdinalIgnoreCase))
+                {
+                    string msg = (parts.Length > 1) ? parts[1] : "Đăng ký thất bại.";
+                    MessageBox.Show(msg, "Đăng ký thất bại",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
                 else
                 {
-                    // Hiển thị lỗi từ Server (ví dụ: "Username đã tồn tại")
-                    MessageBox.Show(parts[1], "Đăng ký thất bại", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Phản hồi không hợp lệ từ server: " + response,
+                        "Lỗi server", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             catch (Exception ex)
@@ -86,9 +97,9 @@ namespace AccountUI
             }
         }
 
-        // --- CÁC HÀM SỰ KIỆN (Giữ nguyên) ---
+        // --- CÁC HÀM SỰ KIỆN (Giữ nguyên) ---
 
-        private void button2_Click(object sender, EventArgs e)
+        private void button2_Click(object sender, EventArgs e)
         {
             DialogResult result = MessageBox.Show("Quay Lại ?", "Chú Ý", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (result == DialogResult.Yes)
@@ -97,8 +108,8 @@ namespace AccountUI
             }
         }
 
-        // Các hàm Enter/Leave cho Tên Đăng Nhập
-        private void textBox1_Enter(object sender, EventArgs e)
+        // Các hàm Enter/Leave cho Tên Đăng Nhập
+        private void textBox1_Enter(object sender, EventArgs e)
         {
             if (textBox1.Text == "Tên Đăng Nhập")
             {
@@ -106,6 +117,7 @@ namespace AccountUI
                 textBox1.ForeColor = Color.DarkSlateBlue;
             }
         }
+
         private void textBox1_Leave(object sender, EventArgs e)
         {
             if (textBox1.Text == "")
@@ -115,8 +127,8 @@ namespace AccountUI
             }
         }
 
-        // Các hàm Enter/Leave cho Email
-        private void textBox2_Enter(object sender, EventArgs e)
+        // Các hàm Enter/Leave cho Email
+        private void textBox2_Enter(object sender, EventArgs e)
         {
             if (textBox2.Text == "Email")
             {
@@ -124,6 +136,7 @@ namespace AccountUI
                 textBox2.ForeColor = Color.DarkSlateBlue;
             }
         }
+
         private void textBox2_Leave(object sender, EventArgs e)
         {
             if (textBox2.Text == "")
@@ -133,8 +146,8 @@ namespace AccountUI
             }
         }
 
-        // --- HÀM MỚI: Enter/Leave cho Họ và Tên ---
-        private void TxtFullName_Enter(object sender, EventArgs e)
+        // --- HÀM MỚI: Enter/Leave cho Họ và Tên ---
+        private void TxtFullName_Enter(object sender, EventArgs e)
         {
             if (txtFullName.Text == "Họ và Tên")
             {
@@ -142,6 +155,7 @@ namespace AccountUI
                 txtFullName.ForeColor = Color.DarkSlateBlue;
             }
         }
+
         private void TxtFullName_Leave(object sender, EventArgs e)
         {
             if (txtFullName.Text == "")
@@ -150,10 +164,10 @@ namespace AccountUI
                 txtFullName.ForeColor = Color.Gray;
             }
         }
-        // ------------------------------------
+        // ------------------------------------
 
-        // Các hàm Enter/Leave cho Mật khẩu
-        private void textBox3_Enter(object sender, EventArgs e)
+        // Các hàm Enter/Leave cho Mật khẩu
+        private void textBox3_Enter(object sender, EventArgs e)
         {
             if (textBox3.Text == "Mật Khẩu")
             {
@@ -162,6 +176,7 @@ namespace AccountUI
                 textBox3.PasswordChar = '*';
             }
         }
+
         private void textBox3_Leave(object sender, EventArgs e)
         {
             if (textBox3.Text == "")
@@ -172,8 +187,8 @@ namespace AccountUI
             }
         }
 
-        // Các hàm Enter/Leave cho Xác nhận Mật khẩu
-        private void textBox4_Enter(object sender, EventArgs e)
+        // Các hàm Enter/Leave cho Xác nhận Mật khẩu
+        private void textBox4_Enter(object sender, EventArgs e)
         {
             if (textBox4.Text == "Xác Nhận Mật Khẩu")
             {
@@ -182,6 +197,7 @@ namespace AccountUI
                 textBox4.PasswordChar = '*';
             }
         }
+
         private void textBox4_Leave(object sender, EventArgs e)
         {
             if (textBox4.Text == "")
@@ -192,8 +208,8 @@ namespace AccountUI
             }
         }
 
-        // Các hàm ẩn/hiện mật khẩu
-        private void button_passwordhide_Click(object sender, EventArgs e)
+        // Các hàm ẩn/hiện mật khẩu
+        private void button_passwordhide_Click(object sender, EventArgs e)
         {
             if (textBox3.PasswordChar == '\0')
             {
@@ -201,6 +217,7 @@ namespace AccountUI
                 textBox3.PasswordChar = '*';
             }
         }
+
         private void button_passwordhide2_Click(object sender, EventArgs e)
         {
             if (textBox4.PasswordChar == '\0')
@@ -209,6 +226,7 @@ namespace AccountUI
                 textBox4.PasswordChar = '*';
             }
         }
+
         private void button_passwordshow_Click(object sender, EventArgs e)
         {
             if (textBox3.PasswordChar == '*')
@@ -217,6 +235,7 @@ namespace AccountUI
                 textBox3.PasswordChar = '\0';
             }
         }
+
         private void button_passwordshow2_Click(object sender, EventArgs e)
         {
             if (textBox4.PasswordChar == '*')
