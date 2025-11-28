@@ -10,7 +10,7 @@ namespace AccountUI
     public partial class Login : Form
     {
         // Cấu hình IP Server (Sửa lại IP AWS của bạn nếu cần)
-        private const string SERVER_IP = "127.0.0.1";
+        private const string SERVER_IP = "20.2.251.78";
         private const int SERVER_PORT = 8888;
 
         public Login()
