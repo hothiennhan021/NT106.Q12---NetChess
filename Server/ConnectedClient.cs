@@ -12,6 +12,10 @@ namespace MyTcpServer
         public StreamReader Reader { get; }
         public StreamWriter Writer { get; }
 
+        // [QUAN TRỌNG] Biến này để lưu ID người dùng sau khi đăng nhập thành công
+        // Mặc định là 0 (chưa đăng nhập)
+        public int UserId { get; set; } = 0;
+
         public ConnectedClient(TcpClient client)
         {
             Client = client;
@@ -20,19 +24,33 @@ namespace MyTcpServer
             Writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = false };
         }
 
+        // Hàm gửi tin nhắn an toàn, không gây crash server nếu client rớt mạng
         public async Task SendMessageAsync(string message)
         {
             try
             {
-                if (!Client.Connected) return;
-
-                await Writer.WriteLineAsync(message);
-                await Writer.FlushAsync(); // QUAN TRỌNG: Đẩy tin đi ngay lập tức
+                if (Client.Connected)
+                {
+                    await Writer.WriteLineAsync(message);
+                    await Writer.FlushAsync();
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Send Error: {ex.Message}");
+                Console.WriteLine($"Lỗi gửi tin tới User {UserId}: {ex.Message}");
             }
+        }
+
+        // Hàm ngắt kết nối 
+        public void Close()
+        {
+            try
+            {
+                Reader.Close();
+                Writer.Close();
+                Client.Close();
+            }
+            catch { /* Bỏ qua lỗi khi đóng */ }
         }
     }
 }

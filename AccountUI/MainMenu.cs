@@ -131,5 +131,11 @@ namespace AccountUI
         private void button3_Click(object sender, EventArgs e) { MessageBox.Show("Chưa có tính năng này."); }
         private void button4_Click(object sender, EventArgs e) { ClientManager.Disconnect(); Application.Exit(); }
         private void MainMenu_Load(object sender, EventArgs e) { }
+
+        private void btnFriend_Click(object sender, EventArgs e)
+        {
+            Friend frm = new Friend();
+            frm.ShowDialog();
+        }
     }
 }

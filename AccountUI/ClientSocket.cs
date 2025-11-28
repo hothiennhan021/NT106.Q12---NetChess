@@ -6,78 +6,72 @@ namespace AccountUI
 {
     public static class ClientSocket
     {
-        private static TcpClient? client;
-        private static NetworkStream? stream;
+        // Biến static để lưu giữ kết nối duy nhất
+        private static TcpClient _client;
+        private static NetworkStream _stream;
 
-        // --- CẤU HÌNH IP SERVER AWS ---
-        // Đây là IP Public của máy EC2 bạn vừa tạo
-        private const string SERVER_IP = "54.66.192.227";
+        // Cấu hình Server
+        private const string SERVER_IP = "127.0.0.1";
         private const int PORT = 8888;
 
-        // Hàm kết nối (được gọi tự động)
-        public static bool Connect()
+        // Hàm kết nối thông minh
+        public static bool Connect(string ipAddress = SERVER_IP, int port = PORT)
         {
             try
             {
-                // Nếu client cũ đã bị hủy hoặc ngắt kết nối, tạo mới
-                if (client == null || !client.Connected)
+                // [QUAN TRỌNG] Nếu đã có kết nối và đang sống -> KHÔNG TẠO MỚI
+                if (_client != null && _client.Connected)
                 {
-                    client = new TcpClient();
-                    // Kết nối đến Server AWS với thời gian chờ (timeout) ngắn để không treo máy lâu
-                    var result = client.BeginConnect(SERVER_IP, PORT, null, null);
-                    var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(3)); // Chờ 3 giây
-
-                    if (!success)
-                    {
-                        client = null;
-                        return false;
-                    }
-
-                    client.EndConnect(result);
-                    stream = client.GetStream();
+                    return true;
                 }
+
+                // Nếu chưa có hoặc bị đứt -> Mới tạo lại
+                _client = new TcpClient();
+                var result = _client.BeginConnect(ipAddress, port, null, null);
+                var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(3));
+
+                if (!success) return false;
+
+                _client.EndConnect(result);
+                _stream = _client.GetStream();
                 return true;
             }
-            catch (Exception)
+            catch
             {
-                client = null;
-                stream = null;
+                _client = null;
+                _stream = null;
                 return false;
             }
         }
 
         public static string SendAndReceive(string message)
         {
-            // 1. TỰ ĐỘNG KẾT NỐI: Kiểm tra xem đã kết nối chưa, nếu chưa thì kết nối lại
-            if (client == null || !client.Connected || stream == null)
+            // Tự động kết nối lại nếu lỡ rớt mạng (nhưng sẽ mất login state nếu server không lưu session)
+            if (_client == null || !_client.Connected)
             {
-                if (!Connect())
-                {
-                    return "ERROR|Không thể kết nối đến Server AWS (Kiểm tra mạng).";
-                }
+                if (!Connect()) return "ERROR|Mất kết nối Server";
             }
 
             try
             {
-                // 2. Gửi dữ liệu
+                // Gửi tin nhắn (Thêm xuống dòng \n)
                 byte[] dataToSend = Encoding.UTF8.GetBytes(message + "\n");
-                stream.Write(dataToSend, 0, dataToSend.Length);
-                stream.Flush(); // Đẩy dữ liệu đi ngay lập tức
+                _stream.Write(dataToSend, 0, dataToSend.Length);
+                _stream.Flush();
 
-                // 3. Nhận phản hồi
-                byte[] buffer = new byte[4096]; // Tăng buffer lên chút cho an toàn
-                int bytesRead = stream.Read(buffer, 0, buffer.Length);
+                // Nhận phản hồi
+                byte[] buffer = new byte[4096];
+                int bytesRead = _stream.Read(buffer, 0, buffer.Length);
 
-                if (bytesRead == 0) return "ERROR|Server đã đóng kết nối.";
+                if (bytesRead == 0) return "ERROR|Server đóng kết nối";
 
                 string response = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
                 return response;
             }
             catch (Exception ex)
             {
-                // Nếu lỗi, reset kết nối để lần sau tự kết nối lại
-                Disconnect();
-                return "ERROR|Mất kết nối: " + ex.Message;
+                Disconnect(); // Lỗi thì reset
+                return "ERROR|Lỗi mạng: " + ex.Message;
             }
         }
 
@@ -85,10 +79,10 @@ namespace AccountUI
         {
             try
             {
-                stream?.Close();
-                client?.Close();
-                client = null;
-                stream = null;
+                _stream?.Close();
+                _client?.Close();
+                _client = null;
+                _stream = null;
             }
             catch { }
         }
