@@ -118,5 +118,43 @@ namespace ChessData
                 cmd.ExecuteNonQuery();
             }
         }
+
+        //5 xóa kết bạn 
+
+        public bool RemoveFriend(int myUserId, string friendName)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    // 1. Tìm ID của người bạn muốn xóa dựa trên Tên
+                    string findIdSql = "SELECT UserId FROM Users WHERE Username = @u";
+                    int friendId = 0;
+                    using (SqlCommand cmd = new SqlCommand(findIdSql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@u", friendName);
+                        object result = cmd.ExecuteScalar();
+                        if (result == null) return false; // Không tìm thấy người này
+                        friendId = (int)result;
+                    }
+
+                    // 2. Xóa bản ghi trong bảng Friendships (Dù ai là người gửi lời mời thì cũng xóa hết)
+                    string deleteSql = @"DELETE FROM Friendships 
+                                 WHERE (RequesterId = @me AND ReceiverId = @friend) 
+                                    OR (RequesterId = @friend AND ReceiverId = @me)";
+
+                    using (SqlCommand cmd = new SqlCommand(deleteSql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@me", myUserId);
+                        cmd.Parameters.AddWithValue("@friend", friendId);
+                        int rows = cmd.ExecuteNonQuery();
+                        return rows > 0; // Trả về true nếu xóa thành công
+                    }
+                }
+            }
+            catch { return false; }
+        }
     }
 }

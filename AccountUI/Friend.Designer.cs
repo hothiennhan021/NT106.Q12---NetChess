@@ -40,6 +40,7 @@
             btnSearch = new Button();
             txtSearch = new TextBox();
             label1 = new Label();
+            btnRemove = new Button();
             tabControl1.SuspendLayout();
             tabList.SuspendLayout();
             tabSearch.SuspendLayout();
@@ -59,6 +60,7 @@
             // 
             // tabList
             // 
+            tabList.Controls.Add(btnRemove);
             tabList.Controls.Add(lbFriends);
             tabList.Controls.Add(btnRefresh);
             tabList.Location = new Point(4, 29);
@@ -175,6 +177,17 @@
             label1.TabIndex = 0;
             label1.Text = "Nhập tên người chơi:";
             // 
+            // btnRemove
+            // 
+            btnRemove.Location = new Point(8, 393);
+            btnRemove.Margin = new Padding(3, 4, 3, 4);
+            btnRemove.Name = "btnRemove";
+            btnRemove.Size = new Size(526, 53);
+            btnRemove.TabIndex = 3;
+            btnRemove.Text = "Xóa bạn";
+            btnRemove.UseVisualStyleBackColor = true;
+            btnRemove.Click += btnRemove_Click;
+            // 
             // Friend
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
@@ -208,5 +221,6 @@
         private System.Windows.Forms.ListBox lbRequests;
         private Button btnRefreshRequest;
         private ListBox lbFriends;
+        private Button btnRemove;
     }
 }

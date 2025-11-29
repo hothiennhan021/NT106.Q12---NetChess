@@ -158,6 +158,18 @@ namespace MyTcpServer
                         return "FRIEND_ACCEPT_OK";
                     }
                     return "ERROR|Sai ID lời mời";
+                // --- Thêm vào switch (command) ---
+
+                case "FRIEND_REMOVE":
+                    // Client gửi: FRIEND_REMOVE|TenBanMuonXoa
+                    if (client.UserId == 0) return "ERROR|Bạn chưa đăng nhập!";
+
+                    string friendName = parts[1];
+
+                    bool isDeleted = _friendRepo.RemoveFriend(client.UserId, friendName);
+
+                    if (isDeleted) return "SUCCESS|Đã xóa bạn thành công.";
+                    else return "ERROR|Lỗi khi xóa bạn (hoặc chưa kết bạn).";
                 // --- KẾT THÚC ĐOẠN CODE BẠN BÈ ---
 
                 default:

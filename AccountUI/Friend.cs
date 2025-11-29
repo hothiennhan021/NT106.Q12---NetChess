@@ -190,5 +190,47 @@ namespace AccountUI
         {
             LoadFriendList();
         }
+
+        private void btnRemove_Click(object sender, EventArgs e)
+        {
+            // 1. Kiểm tra xem đã chọn ai chưa
+            if (lbFriends.SelectedItem == null)
+            {
+                MessageBox.Show("Vui lòng chọn một người bạn để xóa!");
+                return;
+            }
+
+            // 2. Lấy tên người bạn từ dòng đã chọn
+  
+            string selectedText = lbFriends.SelectedItem.ToString();
+
+            // Cắt lấy phần Tên (trước dấu cách đầu tiên)
+            
+            string friendName = selectedText.Split(' ')[0];
+
+            // 3. Hiện hộp thoại xác nhận (Theo Flow)
+            DialogResult confirm = MessageBox.Show(
+                $"Bạn có chắc chắn muốn xóa '{friendName}' khỏi danh sách bạn bè không?",
+                "Xác nhận xóa",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (confirm == DialogResult.Yes)
+            {
+                // 4. Gửi lệnh lên Server
+                string response = ClientSocket.SendAndReceive($"FRIEND_REMOVE|{friendName}");
+
+                if (response.Contains("SUCCESS"))
+                {
+                    MessageBox.Show("Đã xóa thành công!");
+                    // Tải lại danh sách để cập nhật giao diện
+                    LoadFriendList();
+                }
+                else
+                {
+                    MessageBox.Show("Lỗi: " + response);
+                }
+            }
+        }
     }
 }
