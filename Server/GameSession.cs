@@ -46,6 +46,8 @@ namespace MyTcpServer
             await PlayerBlack.SendMessageAsync($"GAME_START|BLACK|{board}|{wTime}|{bTime}");
         }
 
+        // Trong Server/GameSession.cs
+
         public async Task HandleMove(ConnectedClient client, string moveString)
         {
             try
@@ -53,34 +55,63 @@ namespace MyTcpServer
                 Player player = (client == PlayerWhite) ? Player.White : Player.Black;
                 if (player != _gameState.CurrentPlayer) return;
 
-                // 1. Parse
+                // 1. Phân tích chuỗi (Parse)
                 var parts = moveString.Split('|');
-                if (parts.Length != 5) return;
-                int r1 = int.Parse(parts[1]); int c1 = int.Parse(parts[2]);
-                int r2 = int.Parse(parts[3]); int c2 = int.Parse(parts[4]);
+                // MOVE | r1 | c1 | r2 | c2 | [promotionType]
+                // parts[0] là "MOVE", nên r1 bắt đầu từ parts[1]
+
+                if (parts.Length < 5) return;
+
+                int r1 = int.Parse(parts[1]);
+                int c1 = int.Parse(parts[2]);
+                int r2 = int.Parse(parts[3]);
+                int c2 = int.Parse(parts[4]);
 
                 Position from = new Position(r1, c1);
                 Position to = new Position(r2, c2);
 
-                // 2. Check nước đi hợp lệ
+                // 2. Tìm nước đi phù hợp trong danh sách nước đi hợp lệ
                 Pieces piece = _gameState.Board[from];
                 if (piece == null || piece.Color != player) return;
 
-                IEnumerable<Move> moves = piece.GetMoves(from, _gameState.Board);
-                Move move = moves.FirstOrDefault(m => m.ToPos.Equals(to));
+                IEnumerable<Move> moves = _gameState.MovesForPiece(from);
 
-                if (move == null) return;
+                Move move = null;
+
+                // --- XỬ LÝ PHONG CẤP (PROMOTION) ---
+                if (parts.Length == 6) // Có thêm tham số loại quân (VD: 4 = Queen)
+                {
+                    int typeId = int.Parse(parts[5]);
+                    PieceType promoType = (PieceType)typeId;
+
+                    // Tìm nước đi PawnPromotion khớp với vị trí và loại quân
+                    move = moves.OfType<PawnPromotion>()
+                                .FirstOrDefault(m => m.ToPos == to && m.newType == promoType); // Lưu ý: Cần public property 'newType' trong PawnPromotion
+                }
+                else
+                {
+                    // Nước đi thường hoặc Nhập thành (Castling cũng tự động nhận diện qua ToPos)
+                    move = moves.FirstOrDefault(m => m.ToPos == to && !(m is PawnPromotion));
+                }
+
+                if (move == null || !move.IsLegal(_gameState.Board))
+                {
+                    Console.WriteLine("Nước đi không hợp lệ hoặc không tìm thấy trên Server.");
+                    return;
+                }
 
                 // 3. Thực hiện và chuyển lượt
                 _gameState.MakeMove(move);
                 _gameTimer.SwitchTurn();
 
-                // 4. Gửi Update
+                // 4. Gửi Update cho cả 2 người chơi
                 string boardStr = Serialization.BoardToString(_gameState.Board);
                 string curPlayer = _gameState.CurrentPlayer.ToString().ToUpper();
+
+                // Gửi thêm thông tin thời gian
                 await Broadcast($"UPDATE|{boardStr}|{curPlayer}|{_gameTimer.WhiteRemaining}|{_gameTimer.BlackRemaining}");
 
-                // 5. Check Win
+                // 5. Kiểm tra kết quả trận đấu
                 if (_gameState.IsGameOver())
                 {
                     _gameTimer.Stop();
@@ -90,7 +121,10 @@ namespace MyTcpServer
                     await Broadcast($"GAME_OVER_FULL|{wStr}|{reason}");
                 }
             }
-            catch (Exception ex) { Console.WriteLine($"Move Error: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Move Error: {ex.Message} \n {ex.StackTrace}");
+            }
         }
 
         // --- XỬ LÝ LỆNH HỆ THỐNG (Rematch, Leave) ---

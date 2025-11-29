@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace MyTcpServer
 {
+    // Class này để gói gọn TcpClient lại, giúp Server quản lý dễ hơn
     public class ConnectedClient
     {
         public TcpClient Client { get; }
